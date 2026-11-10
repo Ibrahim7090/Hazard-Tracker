@@ -44,3 +44,16 @@ __pycache__/
 *.db
 *.sqlite
 *.sqlite3
+
+# Python / Flask
+.venv/
+__pycache__/
+*.pyc
+instance/
+
+# Secrets
+.env
+backend/.env
+
+# Uploads
+backend/uploads/
