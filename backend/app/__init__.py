@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, jsonify, request
 
 from .config import Config
 from .extensions import cors, db
@@ -27,5 +27,20 @@ def create_app():
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    @app.post("/api/reports")
+    def create_report():
+        data = request.get_json(silent=True) or request.form.to_dict()
+
+        if not data.get("title"):
+            return jsonify({"error": "Title is required"}), 400
+
+        return jsonify(
+            {
+                "status": "ok",
+                "message": "Report received",
+                "title": data.get("title"),
+            }
+        ), 201
 
     return app

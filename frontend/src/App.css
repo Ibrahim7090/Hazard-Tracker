@@ -70,3 +70,46 @@
 .page-title {
   color: var(--text);
 }
+
+.report-card {
+  max-width: 920px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.report-form {
+  margin-top: 1.5rem;
+}
+
+.report-form .form-label {
+  color: var(--text);
+}
+
+.report-form .form-control,
+.report-form .form-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.report-form .form-control::placeholder {
+  color: var(--muted);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.report-card-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  height: 100%;
+}
+
