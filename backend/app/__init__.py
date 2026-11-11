@@ -22,6 +22,7 @@ ALLOWED_IMAGE_MIME_TYPES = {
 }
 
 GEMINI_MODEL = "gemini-3.8-flash"
+GEMINI_SUMMARY_MODEL = "gemini-3.5-flash-lite"
 DEMO_REPORTS = (
     {
         "title": "Demo: Deep pothole on main road",
@@ -188,10 +189,9 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
             "priority": report.priority,
             "status": report.status,
         }
-        prompt = f"""Use only the report data below. Do not infer or add facts. Write one concise,
-present-tense sentence of about 10 words describing the hazard as happening now.
-Then include a danger level of exactly Low, Moderate, or High.
-Return JSON with exactly these string fields: summary, danger_level.
+        prompt = f"""Using only these report facts, write one factual present-tense sentence of
+12 words or fewer. Do not infer or invent details. Return JSON with exactly:
+summary (string), danger_level (one of Low, Moderate, High).
 
 Report data:
 {json.dumps(report_facts, ensure_ascii=False)}"""
@@ -203,10 +203,14 @@ Report data:
                 app.extensions["gemini_client"] = client
 
             response = client.models.generate_content(
-                model=GEMINI_MODEL,
+                model=GEMINI_SUMMARY_MODEL,
                 contents=[prompt],
                 config=genai.types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    max_output_tokens=64,
+                    thinking_config=genai.types.ThinkingConfig(
+                        thinking_level="MINIMAL"
+                    ),
                 ),
             )
             result = json.loads(response.text or "{}")
