@@ -1,7 +1,60 @@
+import { useState } from 'react'
 import { Button, Col, Container, Form, Navbar, Row } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 
 export default function ReportPage() {
+  const [details, setDetails] = useState({
+    title: '',
+    category: '',
+    hazard_type: '',
+    priority: '',
+    description: '',
+  })
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisMessage, setAnalysisMessage] = useState('')
+  const [analysisError, setAnalysisError] = useState('')
+
+  async function handlePhotoChange(event) {
+    const image = event.target.files[0]
+    if (!image) return
+
+    const formData = new FormData()
+    formData.append('image', image)
+    setIsAnalyzing(true)
+    setAnalysisMessage('')
+    setAnalysisError('')
+
+    try {
+      const response = await fetch('/api/analyze-image', {
+        method: 'POST',
+        body: formData,
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Image analysis failed.')
+      }
+
+      setDetails({
+        title: result.title,
+        category: result.category,
+        hazard_type: result.hazard_type,
+        priority: result.priority,
+        description: result.description,
+      })
+      setAnalysisMessage('Suggestions added. You can edit any field.')
+    } catch (error) {
+      setAnalysisError(error.message || 'Image analysis failed. Please try again.')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  function handleDetailChange(event) {
+    const { name, value } = event.target
+    setDetails((currentDetails) => ({ ...currentDetails, [name]: value }))
+  }
+
   return (
     <div className="page-shell" data-bs-theme="dark">
       <Navbar className="topbar">
@@ -20,22 +73,44 @@ export default function ReportPage() {
         <div className="report-card">
           <h2 className="page-title">Report a hazard</h2>
           <p className="text-muted">
-            Add the details below. This is the form layout for the next step.
+            Upload a photo to get a first draft of the report details.
           </p>
 
           <Form className="report-form">
             <Row className="g-3">
+              <Col xs={12}>
+                <Form.Group>
+                  <Form.Label>Upload photo</Form.Label>
+                  <Form.Control
+                    type="file"
+                    name="image"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handlePhotoChange}
+                  />
+                </Form.Group>
+                {isAnalyzing && <p className="text-info small mt-2 mb-0">Analyzing photo...</p>}
+                {analysisMessage && <p className="text-success small mt-2 mb-0" role="status">{analysisMessage}</p>}
+                {analysisError && <p className="text-danger small mt-2 mb-0" role="alert">{analysisError}</p>}
+              </Col>
+
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Title</Form.Label>
-                  <Form.Control type="text" name="title" placeholder="Broken streetlight" />
+                  <Form.Control
+                    type="text"
+                    name="title"
+                    placeholder="Broken streetlight"
+                    value={details.title}
+                    onChange={handleDetailChange}
+                  />
                 </Form.Group>
               </Col>
 
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Category</Form.Label>
-                  <Form.Select name="category">
+                  <Form.Select name="category" value={details.category} onChange={handleDetailChange}>
+                    <option value="">Select a category</option>
                     <option>Road & Transport</option>
                     <option>Drainage & Sanitation</option>
                     <option>Electrical & Utilities</option>
@@ -49,14 +124,21 @@ export default function ReportPage() {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Hazard type</Form.Label>
-                  <Form.Control type="text" name="hazard_type" placeholder="Pothole, flood, fire..." />
+                  <Form.Control
+                    type="text"
+                    name="hazard_type"
+                    placeholder="Pothole, flood, fire..."
+                    value={details.hazard_type}
+                    onChange={handleDetailChange}
+                  />
                 </Form.Group>
               </Col>
 
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Priority</Form.Label>
-                  <Form.Select name="priority">
+                  <Form.Select name="priority" value={details.priority} onChange={handleDetailChange}>
+                    <option value="">Select a priority</option>
                     <option>Low</option>
                     <option>Medium</option>
                     <option>High</option>
@@ -72,6 +154,8 @@ export default function ReportPage() {
                     rows={4}
                     name="description"
                     placeholder="Describe what is happening..."
+                    value={details.description}
+                    onChange={handleDetailChange}
                   />
                 </Form.Group>
               </Col>
@@ -108,12 +192,6 @@ export default function ReportPage() {
                 </Form.Group>
               </Col>
 
-              <Col xs={12}>
-                <Form.Group>
-                  <Form.Label>Upload photo</Form.Label>
-                  <Form.Control type="file" name="image" />
-                </Form.Group>
-              </Col>
             </Row>
 
             <div className="form-actions">
