@@ -13,6 +13,20 @@ from .models.report import HazardReport
 
 __all__ = ["create_app", "HazardReport"]
 
+ALLOWED_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/pjpeg",
+}
+
+GEMINI_MODEL_CANDIDATES = (
+    "gemini-3.8-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+)
+
 
 def create_app():
     app = Flask(
@@ -39,14 +53,19 @@ def create_app():
     @app.post("/api/analyze-image")
     def analyze_image():
         if not app.config["GEMINI_API_KEY"]:
-            return jsonify({"error": "Gemini API key is not configured"}), 503
+            return jsonify({"error": "Gemini API key is not configured. Add GEMINI_API_KEY to backend/.env"}), 503
 
         image = request.files.get("image")
         if not image or not image.filename:
             return jsonify({"error": "Choose an image to analyze"}), 400
 
-        if image.mimetype not in {"image/jpeg", "image/png", "image/webp"}:
-            return jsonify({"error": "Use a JPEG, PNG, or WebP image"}), 400
+        mime_type = (image.mimetype or "").lower()
+        if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+            return jsonify({"error": "Use a JPG, JPEG, PNG, or WebP image"}), 400
+
+        image_bytes = image.read()
+        if not image_bytes:
+            return jsonify({"error": "The uploaded image is empty"}), 400
 
         prompt = f"""Analyze this photo for a public hazard report. Return JSON with these fields:
 title: a short report title
@@ -59,20 +78,37 @@ Use only evidence visible in the photo. Do not guess the location. Use High for 
 immediate danger, Medium when timely attention is needed, and Low for a minor issue."""
 
         try:
-            client = genai.Client(api_key=app.config["GEMINI_API_KEY"])
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
-                    prompt,
-                    genai.types.Part.from_bytes(
-                        data=image.read(),
-                        mime_type=image.mimetype,
-                    ),
-                ],
-                config=genai.types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                ),
-            )
+            client = app.extensions.get("gemini_client")
+            if client is None:
+                client = genai.Client(api_key=app.config["GEMINI_API_KEY"])
+                app.extensions["gemini_client"] = client
+
+            last_error = None
+            response = None
+
+            for model_name in GEMINI_MODEL_CANDIDATES:
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=[
+                            prompt,
+                            genai.types.Part.from_bytes(
+                                data=image_bytes,
+                                mime_type=mime_type,
+                            ),
+                        ],
+                        config=genai.types.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        ),
+                    )
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    app.logger.warning("Gemini model %s failed: %s", model_name, exc)
+
+            if response is None:
+                raise last_error or RuntimeError("No Gemini model could process the image")
+
             result = json.loads(response.text or "{}")
 
             required_fields = ("title", "category", "hazard_type", "priority", "description")
@@ -85,9 +121,11 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
 
             return jsonify({field: result[field].strip() for field in required_fields})
         except (json.JSONDecodeError, TypeError, ValueError):
+            app.logger.exception("Image analysis returned invalid JSON")
             return jsonify({"error": "Could not read the analysis. Try another image."}), 502
-        except Exception:
-            return jsonify({"error": "Image analysis failed. Check your Gemini API key and try again."}), 502
+        except Exception as exc:
+            app.logger.exception("Image analysis failed")
+            return jsonify({"error": f"Image analysis failed: {exc}"}), 502
 
     @app.post("/api/reports")
     def create_report():
