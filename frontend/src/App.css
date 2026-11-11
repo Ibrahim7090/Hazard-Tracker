@@ -54,6 +54,42 @@
   background: var(--bg);
 }
 
+.user-location-icon,
+.hazard-map-icon {
+  background: transparent;
+  border: 0;
+}
+
+.user-location-icon span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #1689ff;
+  box-shadow: 0 0 0 5px rgb(22 137 255 / 28%);
+}
+
+.hazard-map-icon span {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: #d94f38;
+  transform: rotate(-45deg);
+}
+
+.hazard-map-icon span::before {
+  color: #fff;
+  content: '!';
+  font-size: 17px;
+  font-weight: 700;
+  transform: rotate(45deg);
+}
+
 .popup-card {
   color: var(--text);
 }

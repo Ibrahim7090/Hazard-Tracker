@@ -31,6 +31,43 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        report_columns = {
+            column["name"]
+            for column in db.inspect(db.engine).get_columns(HazardReport.__tablename__)
+        }
+        if "location" not in report_columns:
+            with db.engine.begin() as connection:
+                connection.execute(
+                    db.text("ALTER TABLE hazard_report ADD COLUMN location VARCHAR(255)")
+                )
+        if HazardReport.query.count() == 0:
+            db.session.add_all(
+                [
+                    HazardReport(
+                        title="Demo: Roadside pothole",
+                        description="A large pothole is slowing traffic near the main road.",
+                        category="Road & Transport",
+                        hazard_type="Pothole",
+                        location="Near the main road (demo)",
+                        latitude=30.1612,
+                        longitude=71.5301,
+                        priority="High",
+                        status="Pending",
+                    ),
+                    HazardReport(
+                        title="Demo: Damaged streetlight",
+                        description="A streetlight is not working along the pedestrian path.",
+                        category="Electrical & Utilities",
+                        hazard_type="Streetlight outage",
+                        location="Along the pedestrian path (demo)",
+                        latitude=30.1549,
+                        longitude=71.5198,
+                        priority="Medium",
+                        status="In review",
+                    ),
+                ]
+            )
+            db.session.commit()
 
     @app.get("/api/health")
     def health():
@@ -150,6 +187,7 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
             db.session.commit()
         except Exception:
             db.session.rollback()
+            app.logger.exception("Could not save hazard report")
             if image_path:
                 (Path(app.config["UPLOAD_FOLDER"]) / image_path).unlink(missing_ok=True)
             return jsonify({"error": "Could not save the report"}), 500
