@@ -5,6 +5,11 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
 const DEFAULT_CENTER = [30.1575, 71.5249]
+const DEMO_MARKER_OFFSETS = [
+  [0.0012, 0.0014],
+  [-0.0011, 0.0011],
+]
+
 const userLocationIcon = L.divIcon({
   className: 'user-location-icon',
   html: '<span></span>',
@@ -28,6 +33,18 @@ function FlyToUser({ position }) {
   }, [position, map])
 
   return null
+}
+
+function getMarkerPosition(report, index, userPosition) {
+  if (!report.is_demo) {
+    return [report.latitude, report.longitude]
+  }
+
+  const [latitude, longitude] = userPosition ?? DEFAULT_CENTER
+  const [latitudeOffset, longitudeOffset] =
+    DEMO_MARKER_OFFSETS[index % DEMO_MARKER_OFFSETS.length]
+
+  return [latitude + latitudeOffset, longitude + longitudeOffset]
 }
 
 export default function HomePage() {
@@ -88,10 +105,10 @@ export default function HomePage() {
             </Marker>
           )}
 
-          {reports.map((report) => (
+          {reports.map((report, index) => (
             <Marker
               key={report.id}
-              position={[report.latitude, report.longitude]}
+              position={getMarkerPosition(report, index, userPosition)}
               icon={hazardIcon}
             >
               <Popup>
@@ -99,7 +116,9 @@ export default function HomePage() {
                   <strong>{report.title}</strong>
                   <p>{report.hazard_type} · {report.category}</p>
                   <p>{report.description}</p>
-                  {report.location && <p>{report.location}</p>}
+                  {report.is_demo
+                    ? <p>Approximate sample location near you (not saved)</p>
+                    : report.location && <p>{report.location}</p>}
                   <small>Priority: {report.priority} · Status: {report.status}</small>
                 </div>
               </Popup>

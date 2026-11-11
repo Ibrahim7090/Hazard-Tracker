@@ -91,15 +91,23 @@
 }
 
 .popup-card {
-  color: var(--text);
+  color: #1f2937;
+}
+
+.popup-card strong {
+  color: #111827;
 }
 
 .popup-card p {
   margin: 0.4rem 0;
-  color: var(--muted);
+  color: #475569;
 }
 
 .popup-card small {
+  color: #334155;
+}
+
+.ai-summary {
   color: var(--text);
 }
 
@@ -179,4 +187,3 @@
 .hazard-detail-list dt {
   color: var(--muted);
 }
-

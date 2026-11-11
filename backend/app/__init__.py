@@ -21,11 +21,32 @@ ALLOWED_IMAGE_MIME_TYPES = {
     "image/pjpeg",
 }
 
-GEMINI_MODEL_CANDIDATES = (
-    "gemini-3.8-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
+GEMINI_MODEL = "gemini-3.8-flash"
+DEMO_REPORTS = (
+    {
+        "title": "Demo: Deep pothole on main road",
+        "description": "A deep pothole is forcing vehicles to slow down and swerve near the intersection.",
+        "category": "Road & Transport",
+        "hazard_type": "Pothole",
+        "location": "Near a main-road intersection (sample)",
+        "latitude": 30.1612,
+        "longitude": 71.5301,
+        "priority": "High",
+        "status": "Pending",
+    },
+    {
+        "title": "Demo: Streetlight out by crossing",
+        "description": "A streetlight beside the pedestrian crossing is not working after dark.",
+        "category": "Electrical & Utilities",
+        "hazard_type": "Streetlight outage",
+        "location": "Beside a pedestrian crossing (sample)",
+        "latitude": 30.1549,
+        "longitude": 71.5198,
+        "priority": "Medium",
+        "status": "In review",
+    },
 )
+DEMO_REPORT_TITLES = {report["title"] for report in DEMO_REPORTS}
 
 
 def create_app():
@@ -54,34 +75,29 @@ def create_app():
                 connection.execute(
                     db.text("ALTER TABLE hazard_report ADD COLUMN location VARCHAR(255)")
                 )
-        if HazardReport.query.count() == 0:
-            db.session.add_all(
-                [
-                    HazardReport(
-                        title="Demo: Roadside pothole",
-                        description="A large pothole is slowing traffic near the main road.",
-                        category="Road & Transport",
-                        hazard_type="Pothole",
-                        location="Near the main road (demo)",
-                        latitude=30.1612,
-                        longitude=71.5301,
-                        priority="High",
-                        status="Pending",
-                    ),
-                    HazardReport(
-                        title="Demo: Damaged streetlight",
-                        description="A streetlight is not working along the pedestrian path.",
-                        category="Electrical & Utilities",
-                        hazard_type="Streetlight outage",
-                        location="Along the pedestrian path (demo)",
-                        latitude=30.1549,
-                        longitude=71.5198,
-                        priority="Medium",
-                        status="In review",
-                    ),
-                ]
-            )
+        reports = HazardReport.query.order_by(HazardReport.id).all()
+        if not reports:
+            db.session.add_all(HazardReport(**data) for data in DEMO_REPORTS)
             db.session.commit()
+        else:
+            test_reports = [
+                report
+                for report in reports
+                if report.title == "Test"
+                and report.description == "Test"
+                and report.category == "Road & Transport"
+                and report.hazard_type == "Test"
+                and report.location is None
+                and report.latitude == 0
+                and report.longitude == 0
+                and report.priority.lower() == "low"
+                and report.status.lower() == "pending"
+            ]
+            for index, report in enumerate(test_reports):
+                for field, value in DEMO_REPORTS[index % len(DEMO_REPORTS)].items():
+                    setattr(report, field, value)
+            if test_reports:
+                db.session.commit()
 
     @app.get("/api/health")
     def health():
@@ -124,31 +140,19 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
                 client = genai.Client(api_key=app.config["GEMINI_API_KEY"])
                 app.extensions["gemini_client"] = client
 
-            last_error = None
-            response = None
-
-            for model_name in GEMINI_MODEL_CANDIDATES:
-                try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=[
-                            prompt,
-                            genai.types.Part.from_bytes(
-                                data=image_bytes,
-                                mime_type=mime_type,
-                            ),
-                        ],
-                        config=genai.types.GenerateContentConfig(
-                            response_mime_type="application/json"
-                        ),
-                    )
-                    break
-                except Exception as exc:
-                    last_error = exc
-                    app.logger.warning("Gemini model %s failed: %s", model_name, exc)
-
-            if response is None:
-                raise last_error or RuntimeError("No Gemini model could process the image")
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    prompt,
+                    genai.types.Part.from_bytes(
+                        data=image_bytes,
+                        mime_type=mime_type,
+                    ),
+                ],
+                config=genai.types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                ),
+            )
 
             result = json.loads(response.text or "{}")
 
@@ -167,6 +171,64 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
         except Exception as exc:
             app.logger.exception("Image analysis failed")
             return jsonify({"error": f"Image analysis failed: {exc}"}), 502
+
+    @app.post("/api/reports/<int:report_id>/summary")
+    def summarize_report(report_id):
+        report = db.session.get(HazardReport, report_id)
+        if report is None:
+            return jsonify({"error": "Report not found"}), 404
+        if not app.config["GEMINI_API_KEY"]:
+            return jsonify({"error": "Gemini API key is not configured. Add GEMINI_API_KEY to backend/.env"}), 503
+
+        report_facts = {
+            "title": report.title,
+            "category": report.category,
+            "hazard_type": report.hazard_type,
+            "description": report.description,
+            "priority": report.priority,
+            "status": report.status,
+        }
+        prompt = f"""Use only the report data below. Do not infer or add facts. Write one concise,
+present-tense sentence of about 10 words describing the hazard as happening now.
+Then include a danger level of exactly Low, Moderate, or High.
+Return JSON with exactly these string fields: summary, danger_level.
+
+Report data:
+{json.dumps(report_facts, ensure_ascii=False)}"""
+
+        try:
+            client = app.extensions.get("gemini_client")
+            if client is None:
+                client = genai.Client(api_key=app.config["GEMINI_API_KEY"])
+                app.extensions["gemini_client"] = client
+
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[prompt],
+                config=genai.types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+            result = json.loads(response.text or "{}")
+            summary = result.get("summary")
+            danger_level = result.get("danger_level")
+            if not isinstance(summary, str) or not summary.strip():
+                raise ValueError("Gemini returned an empty summary")
+            if danger_level not in {"Low", "Moderate", "High"}:
+                raise ValueError("Gemini returned an invalid danger level")
+
+            return jsonify(
+                {
+                    "summary": summary.strip(),
+                    "danger_level": danger_level,
+                }
+            )
+        except (json.JSONDecodeError, TypeError, ValueError):
+            app.logger.exception("Report summary returned invalid JSON")
+            return jsonify({"error": "Could not read the AI summary. Please try again."}), 502
+        except Exception as exc:
+            app.logger.exception("Report summary failed")
+            return jsonify({"error": f"AI summary failed: {exc}"}), 502
 
     @app.post("/api/reports")
     def create_report():
@@ -239,6 +301,31 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
         ).all()
         return jsonify([_report_to_dict(report) for report in reports])
 
+    @app.delete("/api/reports/<int:report_id>")
+    def delete_report(report_id):
+        report = db.session.get(HazardReport, report_id)
+        if report is None:
+            return jsonify({"error": "Report not found"}), 404
+        if report.title in DEMO_REPORT_TITLES:
+            return jsonify({"error": "Sample hazards cannot be deleted"}), 403
+
+        image_path = report.image_path
+        try:
+            db.session.delete(report)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Could not delete hazard report %s", report_id)
+            return jsonify({"error": "Could not delete the report"}), 500
+
+        if image_path:
+            try:
+                (Path(app.config["UPLOAD_FOLDER"]) / image_path).unlink(missing_ok=True)
+            except OSError:
+                app.logger.exception("Could not remove uploaded image for report %s", report_id)
+
+        return "", 204
+
     return app
 
 
@@ -256,4 +343,5 @@ def _report_to_dict(report):
         "priority": report.priority,
         "status": report.status,
         "created_at": report.created_at.isoformat(),
+        "is_demo": report.title in DEMO_REPORT_TITLES,
     }
