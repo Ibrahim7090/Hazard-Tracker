@@ -95,7 +95,7 @@ export default function ReportPage() {
       if (!response.ok) {
         throw new Error(result.error || 'Could not save the report.')
       }
-      navigate('/reports')
+      navigate('/hazards')
     } catch (error) {
       setSubmitError(error.message || 'Could not save the report. Please try again.')
     } finally {

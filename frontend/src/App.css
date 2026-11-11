@@ -162,7 +162,22 @@
 }
 
 .hazard-search {
-  width: min(320px, 100%);
+  flex: 1 1 260px;
+  max-width: 325px;
+}
+
+.hazard-filters {
+  justify-content: flex-start;
+}
+
+.hazard-filter {
+  flex: 0 1 210px;
+  min-width: 170px;
+}
+
+.hazard-sort {
+  flex: 0 1 210px;
+  min-width: 170px;
 }
 
 .hazard-detail-image {

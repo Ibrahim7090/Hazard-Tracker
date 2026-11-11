@@ -1,11 +1,10 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 import HomePage from './pages/HomePage'
 import HazardsPage from './pages/HazardsPage'
 import ReportPage from './pages/ReportPage'
-import ReportsPage from './pages/ReportsPage'
 
 function App() {
   return (
@@ -14,7 +13,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/hazards" element={<HazardsPage />} />
         <Route path="/report" element={<ReportPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/reports" element={<Navigate to="/hazards" replace />} />
       </Routes>
     </BrowserRouter>
   )

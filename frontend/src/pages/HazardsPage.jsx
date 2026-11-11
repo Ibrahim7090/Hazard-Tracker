@@ -3,6 +3,14 @@ import { Badge, Button, Card, Col, Container, Form, Modal, Navbar, Row } from 'r
 import { Link } from 'react-router-dom'
 
 const PRIORITY_ORDER = { High: 3, Medium: 2, Low: 1 }
+const HAZARD_CATEGORIES = [
+  'Road & Transport',
+  'Drainage & Sanitation',
+  'Electrical & Utilities',
+  'Public Infrastructure',
+  'Environmental',
+  'Other',
+]
 
 function distanceInKm(from, report) {
   const radians = (degrees) => (degrees * Math.PI) / 180
@@ -23,6 +31,120 @@ function priorityVariant(priority) {
   return 'primary'
 }
 
+function dangerVariant(dangerLevel) {
+  if (dangerLevel === 'High') return 'danger'
+  if (dangerLevel === 'Moderate') return 'warning'
+  return 'success'
+}
+
+function HazardCard({ report, userLocation, onDeleted, onView }) {
+  const [summary, setSummary] = useState(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleSummary() {
+    setSummaryLoading(true)
+    setSummaryError('')
+
+    try {
+      const response = await fetch(`/api/reports/${report.id}/summary`, {
+        method: 'POST',
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Could not create an AI summary.')
+      }
+      setSummary(result)
+    } catch (error) {
+      setSummaryError(error.message || 'Could not create an AI summary.')
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete "${report.title}"? This cannot be undone.`)) {
+      return
+    }
+
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      const response = await fetch(`/api/reports/${report.id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Could not delete the hazard.')
+      }
+      onDeleted(report.id)
+    } catch (error) {
+      setDeleteError(error.message || 'Could not delete the hazard.')
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <Card className="report-card-item">
+      <Card.Body>
+        <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <Card.Title className="mb-0">{report.title}</Card.Title>
+          <Badge bg={priorityVariant(report.priority)}>{report.priority}</Badge>
+        </div>
+        <p className="text-muted small mb-2">{report.hazard_type} · {report.category}</p>
+        {userLocation && (
+          <p className="text-muted small mb-3">
+            {distanceInKm(userLocation, report).toFixed(1)} km away
+          </p>
+        )}
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <Badge bg="secondary">{report.status}</Badge>
+          <Button
+            variant="outline-light"
+            size="sm"
+            type="button"
+            onClick={() => onView(report)}
+          >
+            View hazard
+          </Button>
+        </div>
+        <div className="d-flex flex-wrap gap-2">
+          <Button
+            variant="outline-info"
+            size="sm"
+            type="button"
+            onClick={handleSummary}
+            disabled={summaryLoading}
+          >
+            {summaryLoading ? 'Summarizing...' : summary ? 'Refresh AI summary' : 'AI Summary'}
+          </Button>
+          {!report.is_demo && (
+            <Button
+              variant="outline-danger"
+              size="sm"
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete hazard'}
+            </Button>
+          )}
+        </div>
+        {summary && (
+          <p className="ai-summary mt-3 mb-0" role="status">
+            {summary.summary}{' '}
+            <Badge bg={dangerVariant(summary.danger_level)}>{summary.danger_level} danger</Badge>
+          </p>
+        )}
+        {summaryError && <p className="text-danger small mt-2 mb-0" role="alert">{summaryError}</p>}
+        {deleteError && <p className="text-danger small mt-2 mb-0" role="alert">{deleteError}</p>}
+      </Card.Body>
+    </Card>
+  )
+}
+
 export default function HazardsPage() {
   const [reports, setReports] = useState([])
   const [userLocation, setUserLocation] = useState(null)
@@ -30,8 +152,17 @@ export default function HazardsPage() {
   const [locationAttempt, setLocationAttempt] = useState(0)
   const [sortBy, setSortBy] = useState('distance')
   const [titleSearch, setTitleSearch] = useState('')
+  const [category, setCategory] = useState('')
+  const [status, setStatus] = useState('')
   const [selectedReport, setSelectedReport] = useState(null)
   const [error, setError] = useState('')
+
+  function handleDeleted(reportId) {
+    setReports((currentReports) => currentReports.filter((report) => report.id !== reportId))
+    setSelectedReport((currentReport) => (
+      currentReport?.id === reportId ? null : currentReport
+    ))
+  }
 
   useEffect(() => {
     fetch('/api/reports')
@@ -71,9 +202,12 @@ export default function HazardsPage() {
     }
     return 0
   })
-  const visibleReports = sortedReports.filter((report) =>
-    report.title.toLowerCase().includes(titleSearch.trim().toLowerCase()),
-  )
+  const visibleReports = sortedReports.filter((report) => {
+    const matchesSearch = report.title.toLowerCase().includes(titleSearch.trim().toLowerCase())
+    return matchesSearch &&
+      (!category || report.category === category) &&
+      (!status || report.status === status)
+  })
 
   return (
     <div className="page-shell" data-bs-theme="dark">
@@ -88,16 +222,9 @@ export default function HazardsPage() {
       </Navbar>
 
       <Container className="py-4">
-        <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-          <div>
-            <h2 className="page-title">Nearby hazards</h2>
-            <p className="text-muted mb-0">
-              {locationStatus === 'ready'
-                ? 'Sorted by distance from your location.'
-                : 'Allow location access to sort hazards by distance.'}
-            </p>
-          </div>
-          <div className="d-flex flex-wrap gap-2">
+        <div className="mb-4">
+          <h2 className="page-title mb-3">Hazards</h2>
+          <div className="d-flex flex-wrap gap-2 hazard-filters">
             <Form.Control
               aria-label="Search hazards by title"
               className="hazard-search"
@@ -114,6 +241,28 @@ export default function HazardsPage() {
             >
               <option value="distance">Sort by distance</option>
               <option value="priority">Sort by priority</option>
+            </Form.Select>
+            <Form.Select
+              aria-label="Filter hazards by category"
+              className="hazard-filter"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">All categories</option>
+              {HAZARD_CATEGORIES.map((hazardCategory) => (
+                <option key={hazardCategory}>{hazardCategory}</option>
+              ))}
+            </Form.Select>
+            <Form.Select
+              aria-label="Filter hazards by status"
+              className="hazard-filter"
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              <option value="">All statuses</option>
+              <option>Pending</option>
+              <option>In review</option>
+              <option>Resolved</option>
             </Form.Select>
           </div>
         </div>
@@ -138,36 +287,20 @@ export default function HazardsPage() {
           {!error && visibleReports.length === 0 && (
             <Col xs={12}>
               <p className="text-muted">
-                {titleSearch.trim() ? 'No hazards match that title.' : 'No hazards have been reported yet.'}
+                {titleSearch.trim() || category || status
+                  ? 'No hazards match your search and filters.'
+                  : 'No hazards have been reported yet.'}
               </p>
             </Col>
           )}
           {visibleReports.map((report) => (
             <Col key={report.id} md={6} lg={4}>
-              <Card className="report-card-item">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
-                    <Card.Title className="mb-0">{report.title}</Card.Title>
-                    <Badge bg={priorityVariant(report.priority)}>{report.priority}</Badge>
-                  </div>
-                  <p className="text-muted small mb-2">{report.hazard_type} · {report.category}</p>
-                  {userLocation && (
-                    <p className="text-muted small mb-3">
-                      {distanceInKm(userLocation, report).toFixed(1)} km away
-                    </p>
-                  )}
-                  <div className="d-flex justify-content-between align-items-center">
-                    <Badge bg="secondary">{report.status}</Badge>
-                    <Button
-                      variant="outline-light"
-                      size="sm"
-                      onClick={() => setSelectedReport(report)}
-                    >
-                      View hazard
-                    </Button>
-                  </div>
-                </Card.Body>
-              </Card>
+              <HazardCard
+                report={report}
+                userLocation={userLocation}
+                onDeleted={handleDeleted}
+                onView={setSelectedReport}
+              />
             </Col>
           ))}
         </Row>
