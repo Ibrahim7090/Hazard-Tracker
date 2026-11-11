@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Col, Container, Form, Navbar, Row } from 'react-bootstrap'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 export default function ReportPage() {
   const [details, setDetails] = useState({
@@ -13,6 +13,9 @@ export default function ReportPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisMessage, setAnalysisMessage] = useState('')
   const [analysisError, setAnalysisError] = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const navigate = useNavigate()
 
   async function handlePhotoChange(event) {
     const image = event.target.files[0]
@@ -55,6 +58,28 @@ export default function ReportPage() {
     setDetails((currentDetails) => ({ ...currentDetails, [name]: value }))
   }
 
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        body: new FormData(event.currentTarget),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Could not save the report.')
+      }
+      navigate('/reports')
+    } catch (error) {
+      setSubmitError(error.message || 'Could not save the report. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="page-shell" data-bs-theme="dark">
       <Navbar className="topbar">
@@ -76,7 +101,7 @@ export default function ReportPage() {
             Upload a photo to get a first draft of the report details.
           </p>
 
-          <Form className="report-form">
+          <Form className="report-form" onSubmit={handleSubmit}>
             <Row className="g-3">
               <Col xs={12}>
                 <Form.Group>
@@ -102,6 +127,7 @@ export default function ReportPage() {
                     placeholder="Broken streetlight"
                     value={details.title}
                     onChange={handleDetailChange}
+                    required
                   />
                 </Form.Group>
               </Col>
@@ -109,7 +135,7 @@ export default function ReportPage() {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Category</Form.Label>
-                  <Form.Select name="category" value={details.category} onChange={handleDetailChange}>
+                  <Form.Select name="category" value={details.category} onChange={handleDetailChange} required>
                     <option value="">Select a category</option>
                     <option>Road & Transport</option>
                     <option>Drainage & Sanitation</option>
@@ -130,6 +156,7 @@ export default function ReportPage() {
                     placeholder="Pothole, flood, fire..."
                     value={details.hazard_type}
                     onChange={handleDetailChange}
+                    required
                   />
                 </Form.Group>
               </Col>
@@ -137,7 +164,7 @@ export default function ReportPage() {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Priority</Form.Label>
-                  <Form.Select name="priority" value={details.priority} onChange={handleDetailChange}>
+                  <Form.Select name="priority" value={details.priority} onChange={handleDetailChange} required>
                     <option value="">Select a priority</option>
                     <option>Low</option>
                     <option>Medium</option>
@@ -156,6 +183,7 @@ export default function ReportPage() {
                     placeholder="Describe what is happening..."
                     value={details.description}
                     onChange={handleDetailChange}
+                    required
                   />
                 </Form.Group>
               </Col>
@@ -181,25 +209,27 @@ export default function ReportPage() {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Latitude</Form.Label>
-                  <Form.Control type="number" step="any" name="latitude" placeholder="1.2903" />
+                  <Form.Control type="number" step="any" name="latitude" placeholder="1.2903" required />
                 </Form.Group>
               </Col>
 
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Longitude</Form.Label>
-                  <Form.Control type="number" step="any" name="longitude" placeholder="103.8519" />
+                  <Form.Control type="number" step="any" name="longitude" placeholder="103.8519" required />
                 </Form.Group>
               </Col>
 
             </Row>
 
+            {submitError && <p className="text-danger mt-3 mb-0" role="alert">{submitError}</p>}
+
             <div className="form-actions">
               <Button variant="outline-light" type="button">
                 Cancel
               </Button>
-              <Button variant="success" type="submit">
-                Submit report
+              <Button variant="success" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving...' : 'Submit report'}
               </Button>
             </div>
           </Form>

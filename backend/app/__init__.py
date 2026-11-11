@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
+from uuid import uuid4
 
 from flask import Flask, jsonify, request
 from google import genai
+from werkzeug.utils import secure_filename
 
 from .config import Config
 from .constants import HAZARD_CATEGORIES
@@ -26,6 +28,9 @@ def create_app():
 
     db.init_app(app)
     cors.init_app(app)
+
+    with app.app_context():
+        db.create_all()
 
     @app.get("/api/health")
     def health():
@@ -86,17 +91,89 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
 
     @app.post("/api/reports")
     def create_report():
-        data = request.get_json(silent=True) or request.form.to_dict()
+        data = request.form
+        required_fields = (
+            "title",
+            "description",
+            "category",
+            "hazard_type",
+            "priority",
+            "latitude",
+            "longitude",
+        )
+        if any(not data.get(field, "").strip() for field in required_fields):
+            return jsonify({"error": "Complete all required report fields"}), 400
+        if data["category"] not in HAZARD_CATEGORIES:
+            return jsonify({"error": "Choose a valid category"}), 400
+        if data["priority"] not in {"Low", "Medium", "High"}:
+            return jsonify({"error": "Choose a valid priority"}), 400
 
-        if not data.get("title"):
-            return jsonify({"error": "Title is required"}), 400
+        try:
+            latitude = float(data["latitude"])
+            longitude = float(data["longitude"])
+        except ValueError:
+            return jsonify({"error": "Enter valid latitude and longitude"}), 400
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            return jsonify({"error": "Latitude or longitude is out of range"}), 400
 
-        return jsonify(
-            {
-                "status": "ok",
-                "message": "Report received",
-                "title": data.get("title"),
-            }
-        ), 201
+        status = data.get("status", "Pending")
+        if status not in {"Pending", "In review", "Resolved"}:
+            return jsonify({"error": "Choose a valid status"}), 400
+
+        image = request.files.get("image")
+        image_path = None
+        if image and image.filename:
+            if image.mimetype not in {"image/jpeg", "image/png", "image/webp"}:
+                return jsonify({"error": "Use a JPEG, PNG, or WebP image"}), 400
+            filename = secure_filename(image.filename) or "image"
+            image_path = f"{uuid4().hex}_{filename}"
+            image.save(Path(app.config["UPLOAD_FOLDER"]) / image_path)
+
+        report = HazardReport(
+            title=data["title"].strip(),
+            description=data["description"].strip(),
+            category=data["category"],
+            hazard_type=data["hazard_type"].strip(),
+            location=data.get("location", "").strip() or None,
+            image_path=image_path,
+            latitude=latitude,
+            longitude=longitude,
+            priority=data["priority"],
+            status=status,
+        )
+        try:
+            db.session.add(report)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            if image_path:
+                (Path(app.config["UPLOAD_FOLDER"]) / image_path).unlink(missing_ok=True)
+            return jsonify({"error": "Could not save the report"}), 500
+
+        return jsonify(_report_to_dict(report)), 201
+
+    @app.get("/api/reports")
+    def get_reports():
+        reports = HazardReport.query.order_by(
+            HazardReport.created_at.desc(), HazardReport.id.desc()
+        ).all()
+        return jsonify([_report_to_dict(report) for report in reports])
 
     return app
+
+
+def _report_to_dict(report):
+    return {
+        "id": report.id,
+        "title": report.title,
+        "description": report.description,
+        "category": report.category,
+        "hazard_type": report.hazard_type,
+        "location": report.location,
+        "image_path": report.image_path,
+        "latitude": report.latitude,
+        "longitude": report.longitude,
+        "priority": report.priority,
+        "status": report.status,
+        "created_at": report.created_at.isoformat(),
+    }
