@@ -236,8 +236,8 @@ export default function ReportPage() {
 
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Location</Form.Label>
-                  <Form.Control type="text" name="location" placeholder="Main Road, near bus stop" />
+                  <Form.Label>Describe location (optional)</Form.Label>
+                  <Form.Control type="text" name="location" placeholder="Near the north entrance" />
                 </Form.Group>
               </Col>
 

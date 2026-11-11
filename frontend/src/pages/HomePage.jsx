@@ -2,8 +2,21 @@ import { useEffect, useState } from 'react'
 import { Button, Container, Navbar } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
+import L from 'leaflet'
 
 const DEFAULT_CENTER = [30.1575, 71.5249]
+const userLocationIcon = L.divIcon({
+  className: 'user-location-icon',
+  html: '<span></span>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+})
+const hazardIcon = L.divIcon({
+  className: 'hazard-map-icon',
+  html: '<span></span>',
+  iconSize: [30, 36],
+  iconAnchor: [15, 30],
+})
 
 function FlyToUser({ position }) {
   const map = useMap()
@@ -70,13 +83,17 @@ export default function HomePage() {
           <FlyToUser position={userPosition} />
 
           {userPosition && (
-            <Marker position={userPosition}>
+            <Marker position={userPosition} icon={userLocationIcon}>
               <Popup>You are here</Popup>
             </Marker>
           )}
 
           {reports.map((report) => (
-            <Marker key={report.id} position={[report.latitude, report.longitude]}>
+            <Marker
+              key={report.id}
+              position={[report.latitude, report.longitude]}
+              icon={hazardIcon}
+            >
               <Popup>
                 <div className="popup-card">
                   <strong>{report.title}</strong>
