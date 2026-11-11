@@ -21,8 +21,7 @@ ALLOWED_IMAGE_MIME_TYPES = {
     "image/pjpeg",
 }
 
-GEMINI_MODEL = "gemini-3.8-flash"
-GEMINI_SUMMARY_MODEL = "gemini-3.5-flash-lite"
+AI_BUSY_MESSAGE = "AI is busy, please fill the form manually"
 DEMO_REPORTS = (
     {
         "title": "Demo: Deep pothole on main road",
@@ -48,6 +47,45 @@ DEMO_REPORTS = (
     },
 )
 DEMO_REPORT_TITLES = {report["title"] for report in DEMO_REPORTS}
+
+
+class AIBusyError(Exception):
+    pass
+
+
+def _is_rate_limit_error(error):
+    if str(getattr(error, "code", "")) == "429":
+        return True
+
+    status = str(getattr(error, "status", "")).upper()
+    return status == "RESOURCE_EXHAUSTED" or "RESOURCE_EXHAUSTED" in str(error).upper()
+
+
+def _generate_content_with_fallback(client, app, contents, config):
+    try:
+        return client.models.generate_content(
+            model=app.config["GEMINI_MODEL"],
+            contents=contents,
+            config=config,
+        )
+    except Exception as primary_error:
+        if not _is_rate_limit_error(primary_error):
+            raise
+
+        app.logger.warning(
+            "Gemini primary model %s was rate limited; retrying with fallback model %s",
+            app.config["GEMINI_MODEL"],
+            app.config["GEMINI_FALLBACK_MODEL"],
+        )
+        try:
+            return client.models.generate_content(
+                model=app.config["GEMINI_FALLBACK_MODEL"],
+                contents=contents,
+                config=config,
+            )
+        except Exception as fallback_error:
+            app.logger.exception("Gemini fallback model failed after primary rate limit")
+            raise AIBusyError from fallback_error
 
 
 def create_app():
@@ -141,8 +179,9 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
                 client = genai.Client(api_key=app.config["GEMINI_API_KEY"])
                 app.extensions["gemini_client"] = client
 
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
+            response = _generate_content_with_fallback(
+                client,
+                app,
                 contents=[
                     prompt,
                     genai.types.Part.from_bytes(
@@ -169,6 +208,8 @@ immediate danger, Medium when timely attention is needed, and Low for a minor is
         except (json.JSONDecodeError, TypeError, ValueError):
             app.logger.exception("Image analysis returned invalid JSON")
             return jsonify({"error": "Could not read the analysis. Try another image."}), 502
+        except AIBusyError:
+            return jsonify({"error": AI_BUSY_MESSAGE}), 503
         except Exception as exc:
             app.logger.exception("Image analysis failed")
             return jsonify({"error": f"Image analysis failed: {exc}"}), 502
@@ -202,8 +243,9 @@ Report data:
                 client = genai.Client(api_key=app.config["GEMINI_API_KEY"])
                 app.extensions["gemini_client"] = client
 
-            response = client.models.generate_content(
-                model=GEMINI_SUMMARY_MODEL,
+            response = _generate_content_with_fallback(
+                client,
+                app,
                 contents=[prompt],
                 config=genai.types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -230,6 +272,8 @@ Report data:
         except (json.JSONDecodeError, TypeError, ValueError):
             app.logger.exception("Report summary returned invalid JSON")
             return jsonify({"error": "Could not read the AI summary. Please try again."}), 502
+        except AIBusyError:
+            return jsonify({"error": AI_BUSY_MESSAGE}), 503
         except Exception as exc:
             app.logger.exception("Report summary failed")
             return jsonify({"error": f"AI summary failed: {exc}"}), 502

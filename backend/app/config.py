@@ -17,6 +17,10 @@ def _resolve_backend_path(value):
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
     GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip() or None
+    GEMINI_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-3.8-flash").strip()
+    GEMINI_FALLBACK_MODEL = (
+        os.getenv("GEMINI_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+    ).strip()
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",
         f"sqlite:///{(_BACKEND_DIR / 'instance' / 'hazardwatch.db').as_posix()}",
