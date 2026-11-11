@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Container, Form, Navbar } from 'react-bootstrap'
+import { Button, Container, Navbar } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 
@@ -48,11 +48,9 @@ export default function HomePage() {
           <Navbar.Brand className="brand">HazardWatch</Navbar.Brand>
 
           <div className="topbar-actions">
-            <Form.Control
-              type="text"
-              placeholder="Search hazards..."
-              className="search-box"
-            />
+            <Button as={Link} to="/hazards" variant="outline-light">
+              Search hazards
+            </Button>
             <Link to="/report">
               <Button variant="success">Report a hazard</Button>
             </Link>
