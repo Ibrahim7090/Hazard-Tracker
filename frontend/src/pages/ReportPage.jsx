@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Col, Container, Form, Navbar, Row } from 'react-bootstrap'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -15,7 +15,30 @@ export default function ReportPage() {
   const [analysisError, setAnalysisError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [userLocation, setUserLocation] = useState(null)
+  const [locationStatus, setLocationStatus] = useState('loading')
+  const [locationRetry, setLocationRetry] = useState(0)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unavailable')
+      return
+    }
+
+    setLocationStatus('loading')
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setUserLocation({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        })
+        setLocationStatus('ready')
+      },
+      () => setLocationStatus('error'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
+  }, [locationRetry])
 
   async function handlePhotoChange(event) {
     const image = event.target.files[0]
@@ -100,8 +123,31 @@ export default function ReportPage() {
           <p className="text-muted">
             Upload a photo to get a first draft of the report details.
           </p>
+          {locationStatus === 'loading' && (
+            <p className="text-info small" role="status">Getting your location...</p>
+          )}
+          {locationStatus === 'ready' && (
+            <p className="text-success small" role="status">Report location is ready.</p>
+          )}
+          {(locationStatus === 'error' || locationStatus === 'unavailable') && (
+            <div className="text-danger small mb-3" role="alert">
+              <p className="mb-1">
+                Location access is required to place this report on the map. Allow location access in your browser, then retry.
+              </p>
+              <Button
+                variant="outline-light"
+                size="sm"
+                type="button"
+                onClick={() => setLocationRetry((attempt) => attempt + 1)}
+              >
+                Retry location
+              </Button>
+            </div>
+          )}
 
           <Form className="report-form" onSubmit={handleSubmit}>
+            <input type="hidden" name="latitude" value={userLocation?.latitude ?? ''} />
+            <input type="hidden" name="longitude" value={userLocation?.longitude ?? ''} />
             <Row className="g-3">
               <Col xs={12}>
                 <Form.Group>
@@ -206,20 +252,6 @@ export default function ReportPage() {
                 </Form.Group>
               </Col>
 
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Latitude</Form.Label>
-                  <Form.Control type="number" step="any" name="latitude" placeholder="1.2903" required />
-                </Form.Group>
-              </Col>
-
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Longitude</Form.Label>
-                  <Form.Control type="number" step="any" name="longitude" placeholder="103.8519" required />
-                </Form.Group>
-              </Col>
-
             </Row>
 
             {submitError && <p className="text-danger mt-3 mb-0" role="alert">{submitError}</p>}
@@ -228,7 +260,7 @@ export default function ReportPage() {
               <Button variant="outline-light" type="button">
                 Cancel
               </Button>
-              <Button variant="success" type="submit" disabled={isSubmitting}>
+              <Button variant="success" type="submit" disabled={isSubmitting || locationStatus !== 'ready'}>
                 {isSubmitting ? 'Saving...' : 'Submit report'}
               </Button>
             </div>
