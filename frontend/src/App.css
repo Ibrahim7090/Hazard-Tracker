@@ -113,3 +113,34 @@
   height: 100%;
 }
 
+.hazard-sort {
+  max-width: 220px;
+}
+
+.hazard-search {
+  width: min(320px, 100%);
+}
+
+.hazard-detail-image {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+}
+
+.hazard-detail-list {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.4fr) 1fr;
+  gap: 0.5rem 1rem;
+}
+
+.hazard-detail-list dt,
+.hazard-detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.hazard-detail-list dt {
+  color: var(--muted);
+}
+

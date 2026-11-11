@@ -1,42 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Button, Container, Form, Navbar } from 'react-bootstrap'
+import { Button, Container, Navbar } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 
 const DEFAULT_CENTER = [30.1575, 71.5249]
-
-const sampleHazards = [
-  {
-    id: 1,
-    title: 'Flooded road',
-    category: 'Drainage & Sanitation',
-    description: 'Water is pooling near the bus stop after heavy rain.',
-    lat: 30.1612,
-    lng: 71.5301,
-    priority: 'High',
-    status: 'Pending',
-  },
-  {
-    id: 2,
-    title: 'Broken streetlight',
-    category: 'Electrical & Utilities',
-    description: 'One streetlight is not working on the main road.',
-    lat: 30.1549,
-    lng: 71.5198,
-    priority: 'Medium',
-    status: 'In review',
-  },
-  {
-    id: 3,
-    title: 'Large pothole',
-    category: 'Road & Transport',
-    description: 'A deep pothole is causing traffic issues.',
-    lat: 30.1583,
-    lng: 71.5262,
-    priority: 'Low',
-    status: 'Open',
-  },
-]
 
 function FlyToUser({ position }) {
   const map = useMap()
@@ -52,8 +19,17 @@ function FlyToUser({ position }) {
 
 export default function HomePage() {
   const [userPosition, setUserPosition] = useState(null)
+  const [reports, setReports] = useState([])
 
   useEffect(() => {
+    fetch('/api/reports')
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not load reports')
+        return response.json()
+      })
+      .then(setReports)
+      .catch((error) => console.error(error))
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const nextPosition = [position.coords.latitude, position.coords.longitude]
@@ -72,11 +48,9 @@ export default function HomePage() {
           <Navbar.Brand className="brand">HazardWatch</Navbar.Brand>
 
           <div className="topbar-actions">
-            <Form.Control
-              type="text"
-              placeholder="Search hazards..."
-              className="search-box"
-            />
+            <Button as={Link} to="/hazards" variant="outline-light">
+              Search hazards
+            </Button>
             <Link to="/report">
               <Button variant="success">Report a hazard</Button>
             </Link>
@@ -101,14 +75,15 @@ export default function HomePage() {
             </Marker>
           )}
 
-          {sampleHazards.map((hazard) => (
-            <Marker key={hazard.id} position={[hazard.lat, hazard.lng]}>
+          {reports.map((report) => (
+            <Marker key={report.id} position={[report.latitude, report.longitude]}>
               <Popup>
                 <div className="popup-card">
-                  <strong>{hazard.title}</strong>
-                  <p>{hazard.category}</p>
-                  <p>{hazard.description}</p>
-                  <small>Status: {hazard.status}</small>
+                  <strong>{report.title}</strong>
+                  <p>{report.hazard_type} · {report.category}</p>
+                  <p>{report.description}</p>
+                  {report.location && <p>{report.location}</p>}
+                  <small>Priority: {report.priority} · Status: {report.status}</small>
                 </div>
               </Popup>
             </Marker>

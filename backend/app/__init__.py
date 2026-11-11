@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from google import genai
 from werkzeug.utils import secure_filename
 
@@ -49,6 +49,10 @@ def create_app():
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/api/uploads/<path:filename>")
+    def get_uploaded_image(filename):
+        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
     @app.post("/api/analyze-image")
     def analyze_image():
